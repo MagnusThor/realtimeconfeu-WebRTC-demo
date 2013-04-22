@@ -1,0 +1,115 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>realtimeconfeu - webrtc example - Zebra Edition</title>
+    <link href="css/demo.css" rel="stylesheet" />
+    
+</head>
+    <body>
+        <h1>realtimeconfeu - webrtc example</h1>
+        <video id="localvideo" muted="true" width="320" height="200" autoplay controls></video>
+        
+        <div class="remoteVideos">
+            
+        </div>
+        
+        <hr/>
+
+        <input type="text" id="im-text" placeholder="What do you want to say?"/>
+        <hr/>
+        <div id="messages">
+            
+        </div>
+        
+
+    </body>
+    <script src="js/jquery-1.9.1.js"></script>
+    <script src="js/jXSockets.2.3.min.js"></script>
+    <script src="js/jXSockets.WebRTC.0.9.3.min.js"></script>
+
+    <script>
+
+        var ws, rtc;
+        $(function () {
+
+            //  You can also install and set up your local XSockets.NET service - See http://xsockets.net/api/installation
+            ws = new XSockets.WebSocket("ws://029b80bd629c44dca22c5cc0a2637fcb.cloudapp.net:10101/PeerBroker", "PeerBroker");
+
+            ws.bind(XSockets.Events.open, function (conn) {
+                // We are now connected to the Peer broker controller ( Signaling Server )
+
+                rtc = new XSockets.WebRTC(ws);
+
+                rtc.bind(XSockets.WebRTC.Events.onContextChange, function (ctx) {
+                    // Fires when we have a context ( connected to the "Broker" )
+                    // We are not dealing with it at all :-)
+                    console.log(ctx);
+                });
+
+
+                rtc.bind(XSockets.WebRTC.Events.onPeerConnectionCreated, function (ctx) {
+                    // Create a new DataChannel, start subscribe to IM
+                    rtc.channelSubscribe("IM", ctx.StorageGuid, function (message) {
+
+                        // Add the message to the UI
+                        $("<p>").text(message.im).prependTo("#messages");
+
+                    });
+                });
+
+                rtc.bind(XSockets.WebRTC.Events.onlocalStream, function (stream) {
+                    attachMediaStream(document.querySelector("#localvideo"), stream);
+                });
+
+                rtc.bind(XSockets.WebRTC.Events.onRemoteStream, function (evt) {
+                    // We got a remote media stream, lets create a new video element
+                    var remoteVideo = $("<video>").addClass("remote").attr({
+                        id: evt.StorageGuid,
+                        autoplay: "autoplay",
+                        controls: "controls",
+                        width: "320",
+                        height: "200"
+                    });
+                    attachMediaStream(remoteVideo.get(0), evt.MediaStreamEvent.stream);
+                    remoteVideo.appendTo(".remoteVideos");
+                });
+
+                rtc.bind(XSockets.WebRTC.Events.onPeerConnectionLost, function (peer) {
+                    $("video[id='" + peer.StorageGuid + "']").fadeOut(function () {
+                        $(this).remove()
+                    });
+                });
+
+                // access the camera + mic
+                rtc.getUserMedia({
+                    auto: true,
+                    video: true
+                }, function () {
+                    rtc.ready();
+                    // change context to connect to "others", we are using a static context;
+                    rtc.changeContext('83237619-ab0a-4b58-afae-527a3df89455');
+                    // See http://xsockets.net/api to see how you offer context etc.  Make a  proper call :-)
+                });
+
+                $("#im-text").bind("keyup", function (evt) {
+                    if (evt.keyCode === 13) {
+                        evt.preventDefault();
+
+                        // Publish a message to the DataChannel, topic is IM, will send to "all" subscribing to IM..
+                        rtc.channelPublish("IM", {
+                            im: $(this).val()
+                        });
+                        $(this).val('');
+
+                    }
+
+                });
+
+
+            });
+
+        });
+
+    </script>
+
+</html>
